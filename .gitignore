@@ -14,7 +14,7 @@ target/
 
 # Environment & secrets
 .env
-*.env
+*.env.local
 client_secret.json
 token.json
 
@@ -29,13 +29,29 @@ token.json
 Thumbs.db
 desktop.ini
 
-# App state & output (local data)
+# App state & output (local data — large media files)
 engine/state/
 engine/output/
 engine/cache/
 output/
 state/
 cache/
+browser_profiles/
+
+# Generated media
+*.mp4
+*.mp3
+*.wav
+*.webm
+*.avi
+*.mov
+*.ogg
+
+# Large binary files
+*.woff2
+*.woff
+*.ttf
+*.otf
 
 # Logs
 *.log
@@ -45,11 +61,15 @@ cache/
 *.sqlite3-wal
 *.sqlite3-shm
 
-# Tauri debug build
+# Tauri build artifacts
 src-tauri/target/
 
-# Playwright browser data
-browser_profiles/
-
-# Archive
+# Archive (old V4 frontend)
 _archive/
+
+# Package lock (regenerated on install)
+package-lock.json
+
+# Python cache
+*.egg-info/
+.eggs/
