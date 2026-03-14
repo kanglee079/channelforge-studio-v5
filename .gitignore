@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Build outputs
+dist/
+target/
+*.exe
+*.msi
+*.dmg
+
+# Environment & secrets
+.env
+*.env
+client_secret.json
+token.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# App state & output (local data)
+engine/state/
+engine/output/
+engine/cache/
+output/
+state/
+cache/
+
+# Logs
+*.log
+
+# SQLite databases
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Tauri debug build
+src-tauri/target/
+
+# Playwright browser data
+browser_profiles/
+
+# Archive
+_archive/

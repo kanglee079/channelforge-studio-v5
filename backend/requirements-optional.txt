@@ -1,0 +1,14 @@
+# Optional research / crawling
+scrapling>=0.4.2
+
+# Optional local subtitle / transcription
+faster-whisper>=1.1.0
+whisperx>=3.8.2
+
+# Optional local TTS
+kokoro>=0.9.4
+soundfile>=0.13.1
+# piper is usually installed as a binary or from its project docs
+
+trafilatura>=1.12.0
+youtube-transcript-api>=0.6.3

@@ -1,0 +1,46 @@
+{
+  "name": "history_channel",
+  "title_prefix": "History in 60s: ",
+  "niche": "history facts and timelines",
+  "language": "en",
+  "default_video_format": "shorts",
+  "upload_enabled": false,
+  "privacy_status": "private",
+  "category_id": "27",
+  "publish_interval_minutes": 120,
+  "daily_upload_soft_limit": 60,
+  "notify_subscribers": false,
+  "tags": [
+    "history",
+    "world history",
+    "did you know"
+  ],
+  "voice_provider_order": [
+    "elevenlabs",
+    "openai",
+    "kokoro"
+  ],
+  "transcribe_provider_order": [
+    "faster_whisper",
+    "openai"
+  ],
+  "footage_provider_order": [
+    "pexels",
+    "pixabay"
+  ],
+  "research_provider_order": [
+    "wikipedia",
+    "youtube_transcript",
+    "trafilatura"
+  ],
+  "youtube_client_secrets": "client_secret.json",
+  "youtube_token_json": "token_history.json",
+  "disclose_synthetic_media": false,
+  "allowed_seed_domains": [
+    "wikipedia.org",
+    "archive.org"
+  ],
+  "blocked_words": [
+    "graphic execution"
+  ]
+}
