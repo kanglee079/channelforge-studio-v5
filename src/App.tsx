@@ -15,11 +15,13 @@ import AnalyticsPage from "./pages/AnalyticsPage";
 import CostsPage from "./pages/CostsPage";
 import SettingsPage from "./pages/SettingsPage";
 import LogsPage from "./pages/LogsPage";
+import ScenePlannerPage from "./pages/ScenePlannerPage";
+import ReviewCenterPage from "./pages/ReviewCenterPage";
 
 export type PageId =
   | "dashboard" | "channels" | "workspaces" | "trends"
   | "research" | "content" | "factory" | "templates"
-  | "calendar" | "analytics" | "costs" | "settings" | "logs" | "jobs";
+  | "calendar" | "analytics" | "costs" | "settings" | "logs" | "jobs" | "scene-planner" | "review";
 
 export default function App() {
   const [page, setPage] = useState<PageId>("dashboard");
@@ -53,6 +55,8 @@ export default function App() {
       case "costs": return <CostsPage />;
       case "settings": return <SettingsPage />;
       case "logs": return <LogsPage />;
+      case "scene-planner": return <ScenePlannerPage />;
+      case "review": return <ReviewCenterPage />;
       default: return <DashboardPage />;
     }
   };

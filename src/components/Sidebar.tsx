@@ -9,6 +9,8 @@ const NAV: { id: PageId; label: string; icon: string }[] = [
   { id: "research",   label: "Nghiên cứu",         icon: "📚" },
   { id: "content",    label: "Nội dung",            icon: "✍️" },
   { id: "factory",    label: "Sản xuất video",      icon: "🎬" },
+  { id: "scene-planner", label: "Scene Planner",    icon: "🎯" },
+  { id: "review",         label: "Duyệt nội dung",  icon: "✅" },
   { id: "templates",  label: "Mẫu video",          icon: "🎨" },
   { id: "calendar",   label: "Lịch đăng",          icon: "📅" },
   { id: "analytics",  label: "Thống kê",           icon: "📈" },

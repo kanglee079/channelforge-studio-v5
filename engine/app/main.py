@@ -11,6 +11,10 @@ from .routers.workspaces import router as workspaces_router
 from .routers.research import router as research_router
 from .routers.content import router as content_router
 from .routers.templates import router as templates_router, seed_default_templates
+from .routers.visual_match import router as visual_match_router
+from .routers.research_v5 import router as research_v5_router
+from .routers.review_analytics_cost import router as rac_router
+from .routers.system import router as system_router
 from .scheduler_ui import start_background_scheduler
 
 app = FastAPI(title="ChannelForge Studio", version="5.0.0")
@@ -36,6 +40,12 @@ app.include_router(workspaces_router)
 app.include_router(research_router)
 app.include_router(content_router)
 app.include_router(templates_router)
+
+# V5 API (Phase 3+)
+app.include_router(visual_match_router)
+app.include_router(research_v5_router)
+app.include_router(rac_router)
+app.include_router(system_router)
 
 
 @app.get("/healthz")
