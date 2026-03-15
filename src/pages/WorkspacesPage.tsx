@@ -2,300 +2,221 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { Card } from "../components/Card";
 
-interface HealthInfo {
-  storage_exists: boolean;
-  has_profile: boolean;
-  has_downloads: boolean;
-}
-
+/* ── Types ── */
 interface Workspace {
-  id: number; name: string; channel_name: string;
-  session_status: string; storage_path: string;
-  proxy_config?: string;
-  last_login_at: string | null; last_verified_at: string | null;
-  created_at: string; health?: HealthInfo;
+  id: number; name: string; channel_name: string; session_status: string;
+  proxy_config: string; storage_path: string; notes: string;
+  last_login_at: string; last_verified_at: string;
+  health?: { storage_exists: boolean; has_profile: boolean; has_downloads: boolean };
 }
-
-interface ProxyProfile {
-  id: number; name: string; protocol: string; server: string; port: number;
-  status: string; last_tested_at: string | null; notes: string;
+interface RuntimeState {
+  workspace_id: number; runtime_status: string; browser_pid: number;
+  context_attached: number; current_route_mode: string; current_outbound_ip: string;
+  last_launch_at: string; last_seen_alive_at: string; last_error_message: string;
+  in_registry?: boolean;
 }
+interface ProxyProfile { id: number; name: string; server: string; port: number; protocol: string; status: string; last_tested_at: string; }
+interface PolicyEvent { id: number; workspace_id: number; job_type: string; policy_mode: string; decision: string; outbound_ip: string; created_at: string; }
+interface SessionCheck { id: number; workspace_id: number; check_type: string; status: string; details_json: string; screenshot_path: string; created_at: string; }
 
-interface HealthEvent {
-  id: number; event_type: string; severity: string; message: string; created_at: string;
-}
-
-const STATUS_VI: Record<string, string> = {
-  new: "Mới tạo", active: "Đang hoạt động", expired: "Hết hạn", error: "Lỗi",
-  degraded: "Suy giảm", archived: "Đã lưu trữ",
+/* ── Status colors ── */
+const STATUS_COLORS: Record<string, string> = {
+  running: "#22c55e", upload_ready: "#22c55e", active: "#22c55e",
+  launching: "#f59e0b", verifying: "#f59e0b", closing: "#f59e0b",
+  stopped: "#6b7280", inactive: "#6b7280", new: "#6b7280",
+  login_required: "#f97316", degraded: "#ef4444", blocked: "#dc2626", crashed: "#dc2626",
 };
 
-const SEV_COLOR: Record<string, string> = {
-  info: "chip-done", warning: "chip-retry", error: "chip-failed", critical: "chip-failed",
+const POLICY_COLORS: Record<string, string> = {
+  DIRECT: "#22c55e", WORKSPACE_ROUTE: "#3b82f6", BLOCK: "#ef4444",
 };
 
 export default function WorkspacesPage() {
-  const [items, setItems] = useState<Workspace[]>([]);
-  const [channels, setChannels] = useState<any[]>([]);
+  const [tab, setTab] = useState<"grid" | "routes" | "policy" | "sessions">("grid");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [runtimes, setRuntimes] = useState<RuntimeState[]>([]);
   const [proxies, setProxies] = useState<ProxyProfile[]>([]);
-  const [newName, setNewName] = useState("");
-  const [newChannel, setNewChannel] = useState("");
-  const [msg, setMsg] = useState("");
-  const [tab, setTab] = useState<"workspaces" | "proxy" | "health">("workspaces");
-  const [healthEvents, setHealthEvents] = useState<HealthEvent[]>([]);
-  const [selectedWs, setSelectedWs] = useState<number | null>(null);
+  const [events, setEvents] = useState<PolicyEvent[]>([]);
+  const [sessionChecks, setSessionChecks] = useState<SessionCheck[]>([]);
+  const [selWs, setSelWs] = useState<number>(0);
+  const [loading, setLoading] = useState("");
 
-  // Proxy form
-  const [pName, setPName] = useState("");
-  const [pServer, setPServer] = useState("");
-  const [pPort, setPPort] = useState("8080");
-  const [pProtocol, setPProtocol] = useState("http");
-
-  const load = () => {
-    api.get<{ items: Workspace[] }>("/api/v2/workspaces").then((r) => setItems(r.items)).catch(() => setItems([]));
-    api.get<{ items: any[] }>("/api/channels").then((r) => setChannels(r.items)).catch(() => {});
-    api.get<{ items: ProxyProfile[] }>("/api/v2/workspaces/proxy-profiles").then((r) => setProxies(r.items)).catch(() => setProxies([]));
+  const fetchAll = () => {
+    api.get<{ items: Workspace[] }>("/api/v2/workspaces").then(d => setWorkspaces(d.items)).catch(() => {});
+    api.get<{ items: RuntimeState[] }>("/api/v2/workspaces/runtime/all").then(d => setRuntimes(d.items)).catch(() => setRuntimes([]));
+    api.get<{ items: ProxyProfile[] }>("/api/v2/workspaces/proxy-profiles").then(d => setProxies(d.items)).catch(() => {});
+    api.get<{ items: PolicyEvent[] }>("/api/v2/workspaces/network-events/all").then(d => setEvents(d.items)).catch(() => setEvents([]));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { fetchAll(); const iv = setInterval(fetchAll, 10000); return () => clearInterval(iv); }, []);
 
-  const create = async () => {
-    if (!newName.trim()) return;
+  const getRuntime = (wsId: number) => runtimes.find(r => r.workspace_id === wsId);
+
+  const doAction = async (wsId: number, action: string) => {
+    setLoading(`${action}-${wsId}`);
     try {
-      const res = await api.post<{ message: string }>("/api/v2/workspaces", { name: newName, channel_name: newChannel || null });
-      setMsg(res.message); setNewName(""); setNewChannel(""); load();
-    } catch (e: any) { setMsg(e.message); }
+      await api.post(`/api/v2/workspaces/${wsId}/${action}`);
+      setTimeout(fetchAll, 500);
+    } catch {}
+    setLoading("");
   };
 
-  const launch = async (id: number) => {
-    setMsg("Đang mở trình duyệt...");
-    try {
-      const res = await api.post<{ message: string }>(`/api/v2/workspaces/${id}/launch`);
-      setMsg(res.message);
-    } catch (e: any) { setMsg(e.message); }
+  const loadSessionChecks = (wsId: number) => {
+    setSelWs(wsId);
+    api.get<{ items: SessionCheck[] }>(`/api/v2/workspaces/${wsId}/session-checks`).then(d => setSessionChecks(d.items)).catch(() => setSessionChecks([]));
   };
 
-  const healthCheck = async (id: number) => {
-    setMsg("Đang kiểm tra...");
-    try {
-      const res = await api.post<{ overall: string; checks: any[] }>(`/api/v2/workspaces/${id}/healthcheck`);
-      setMsg(`Sức khỏe: ${res.overall} (${res.checks.filter((c: any) => c.passed).length}/${res.checks.length} passed)`);
-      load();
-    } catch (e: any) { setMsg(e.message); }
-  };
-
-  const archive = async (id: number) => {
-    try {
-      const res = await api.post<{ message: string }>(`/api/v2/workspaces/${id}/archive`);
-      setMsg(res.message); load();
-    } catch (e: any) { setMsg(e.message); }
-  };
-
-  const restore = async (id: number) => {
-    try {
-      const res = await api.post<{ message: string }>(`/api/v2/workspaces/${id}/restore`);
-      setMsg(res.message); load();
-    } catch (e: any) { setMsg(e.message); }
-  };
-
-  const clearTemp = async (id: number) => {
-    try {
-      const res = await api.post<{ message: string; cleared: number }>(`/api/v2/workspaces/${id}/clear-temp`);
-      setMsg(res.message);
-    } catch (e: any) { setMsg(e.message); }
-  };
-
-  const createProxy = async () => {
-    if (!pName.trim() || !pServer.trim()) return;
-    try {
-      const res = await api.post<{ message: string }>("/api/v2/workspaces/proxy-profiles", {
-        name: pName, server: pServer, port: parseInt(pPort), protocol: pProtocol,
-      });
-      setMsg(res.message); setPName(""); setPServer(""); load();
-    } catch (e: any) { setMsg(e.message); }
-  };
-
-  const testProxy = async (id: number) => {
-    setMsg("Đang test proxy...");
-    try {
-      const res = await api.post<{ message: string }>(`/api/v2/workspaces/proxy-profiles/${id}/test`);
-      setMsg(res.message); load();
-    } catch (e: any) { setMsg(e.message); }
-  };
-
-  const loadHealthEvents = async (wsId: number) => {
-    setSelectedWs(wsId); setTab("health");
-    try {
-      const res = await api.get<{ items: HealthEvent[] }>(`/api/v2/workspaces/${wsId}/health-events`);
-      setHealthEvents(res.items);
-    } catch { setHealthEvents([]); }
-  };
-
-  const statusColor = (s: string) =>
-    s === "active" ? "chip-done" : s === "degraded" ? "chip-retry" : s === "archived" ? "" : s === "new" ? "chip-queued" : "chip-failed";
+  const TABS = [
+    { key: "grid", label: "🖥️ Workspaces" },
+    { key: "routes", label: "🔀 Route Profiles" },
+    { key: "policy", label: "📡 Policy Events" },
+    { key: "sessions", label: "🔐 Session Checks" },
+  ] as const;
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <h2>Trình duyệt & Workspace</h2>
-        <p>Mỗi kênh có trình duyệt riêng, proxy riêng, phiên đăng nhập tách biệt hoàn toàn.</p>
-      </div>
-
-      {msg && <div className="chip chip-accent" style={{ marginBottom: 12 }}>{msg}</div>}
+    <div>
+      <h2>Workspace Supervisor</h2>
+      <p className="text-muted">Quản lý lifecycle, network policy, session verification cho từng channel workspace.</p>
 
       {/* Tab bar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button className={`btn btn-sm ${tab === "workspaces" ? "btn-primary" : ""}`} onClick={() => setTab("workspaces")}>
-          Workspace ({items.length})
-        </button>
-        <button className={`btn btn-sm ${tab === "proxy" ? "btn-primary" : ""}`} onClick={() => setTab("proxy")}>
-          Proxy ({proxies.length})
-        </button>
-        {selectedWs && (
-          <button className={`btn btn-sm ${tab === "health" ? "btn-primary" : ""}`} onClick={() => setTab("health")}>
-            Nhật ký sức khỏe
-          </button>
-        )}
+      <div className="tab-bar" style={{ marginBottom: 16 }}>
+        {TABS.map(t => (
+          <button key={t.key} className={`tab-btn${tab === t.key ? " active" : ""}`} onClick={() => setTab(t.key as typeof tab)}>{t.label}</button>
+        ))}
       </div>
 
-      {/* ── WORKSPACES TAB ── */}
-      {tab === "workspaces" && (
-        <div className="grid-2">
-          <Card title="Danh sách workspace">
-            <div className="list-stack">
-              {items.map((w) => (
-                <div key={w.id} className="list-item">
-                  <div className="list-item-main">
-                    <strong>{w.name}</strong>
-                    <span className={`chip chip-sm ${statusColor(w.session_status)}`}>
-                      {STATUS_VI[w.session_status] || w.session_status}
-                    </span>
-                    {w.health && (
-                      <span className={`chip chip-sm ${w.health.storage_exists && w.health.has_profile ? "chip-done" : "chip-retry"}`}>
-                        {w.health.storage_exists && w.health.has_profile ? "✓ Đầy đủ" : "⚠ Thiếu dữ liệu"}
-                      </span>
-                    )}
+      {/* ── GRID TAB ── */}
+      {tab === "grid" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 16 }}>
+          {workspaces.map(ws => {
+            const rt = getRuntime(ws.id);
+            const status = rt?.runtime_status || ws.session_status || "stopped";
+            const color = STATUS_COLORS[status] || "#6b7280";
+            const routeMode = rt?.current_route_mode || "DIRECT";
+            return (
+              <Card key={ws.id} title="">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                  <div>
+                    <strong style={{ fontSize: "1.1rem" }}>{ws.name}</strong>
+                    {ws.channel_name && <span className="text-muted" style={{ marginLeft: 8 }}>({ws.channel_name})</span>}
                   </div>
-                  <div className="list-item-meta">
-                    <span>Kênh: {w.channel_name || "–"}</span>
-                    <span>Proxy: {w.proxy_config || "Trực tiếp"}</span>
-                    {w.last_login_at && <span>Đăng nhập cuối: {new Date(w.last_login_at).toLocaleDateString("vi-VN")}</span>}
-                  </div>
-                  <div className="list-item-actions" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    <button className="btn btn-sm" onClick={() => launch(w.id)}>🌐 Mở</button>
-                    <button className="btn btn-sm" onClick={() => healthCheck(w.id)}>🩺 Kiểm tra</button>
-                    <button className="btn btn-sm" onClick={() => clearTemp(w.id)}>🧹 Dọn temp</button>
-                    <button className="btn btn-sm" onClick={() => loadHealthEvents(w.id)}>📋 Logs</button>
-                    {w.session_status === "archived" ? (
-                      <button className="btn btn-sm" onClick={() => restore(w.id)}>♻️ Khôi phục</button>
-                    ) : (
-                      <button className="btn btn-sm" onClick={() => archive(w.id)}>📦 Lưu trữ</button>
-                    )}
-                  </div>
+                  <span className="chip" style={{ background: color, color: "#fff", padding: "2px 10px", borderRadius: 12, fontSize: "0.8rem" }}>
+                    {status}
+                  </span>
                 </div>
-              ))}
-              {items.length === 0 && <p className="text-muted">Chưa có workspace nào.</p>}
-            </div>
-          </Card>
 
-          <Card title="Tạo workspace mới">
-            <div className="form-grid">
-              <div className="form-field">
-                <label className="form-label">Tên workspace</label>
-                <input className="form-input" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="VD: kenh-space-facts" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Gắn với kênh</label>
-                <select className="form-input" value={newChannel} onChange={(e) => setNewChannel(e.target.value)}>
-                  <option value="">Không gắn kênh</option>
-                  {channels.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-primary" onClick={create}>Tạo workspace</button>
-            </div>
-          </Card>
+                {/* Runtime info */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: "0.85rem", marginBottom: 12 }}>
+                  <span className="text-muted">Route: <strong style={{ color: POLICY_COLORS[routeMode] || "#6b7280" }}>{routeMode}</strong></span>
+                  <span className="text-muted">PID: {rt?.browser_pid || "—"}</span>
+                  <span className="text-muted">IP: {rt?.current_outbound_ip || "local"}</span>
+                  <span className="text-muted">Verified: {ws.last_verified_at ? new Date(ws.last_verified_at).toLocaleString("vi") : "—"}</span>
+                </div>
+
+                {rt?.last_error_message && (
+                  <div style={{ background: "rgba(239,68,68,0.15)", padding: 8, borderRadius: 6, fontSize: "0.8rem", marginBottom: 8, color: "#f87171" }}>
+                    ⚠️ {rt.last_error_message.slice(0, 120)}
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {(!rt || status === "stopped" || status === "crashed") && (
+                    <button className="btn btn-sm btn-primary" disabled={!!loading} onClick={() => doAction(ws.id, "open")}>▶ Mở</button>
+                  )}
+                  {(status === "running" || status === "upload_ready") && (
+                    <>
+                      <button className="btn btn-sm" disabled={!!loading} onClick={() => doAction(ws.id, "verify-session")}>🔍 Verify</button>
+                      <button className="btn btn-sm" disabled={!!loading} onClick={() => doAction(ws.id, "capture-screenshot")}>📸</button>
+                      <button className="btn btn-sm" style={{ color: "#f59e0b" }} disabled={!!loading} onClick={() => doAction(ws.id, "close")}>⏹ Đóng</button>
+                    </>
+                  )}
+                  {(status === "degraded" || status === "login_required") && (
+                    <button className="btn btn-sm" disabled={!!loading} onClick={() => doAction(ws.id, "relaunch")}>🔄 Relaunch</button>
+                  )}
+                  {rt && status !== "stopped" && (
+                    <button className="btn btn-sm" style={{ color: "#ef4444" }} disabled={!!loading} onClick={() => doAction(ws.id, "force-kill")}>💀 Kill</button>
+                  )}
+                  <button className="btn btn-sm" onClick={() => { loadSessionChecks(ws.id); setTab("sessions"); }}>📋 Logs</button>
+                </div>
+              </Card>
+            );
+          })}
+          {workspaces.length === 0 && <Card title=""><p className="text-muted">Chưa có workspace. Tạo workspace mới để bắt đầu.</p></Card>}
         </div>
       )}
 
-      {/* ── PROXY TAB ── */}
-      {tab === "proxy" && (
-        <div className="grid-2">
-          <Card title="Proxy Profiles">
-            <div className="list-stack">
-              {proxies.map((p) => (
-                <div key={p.id} className="list-item">
-                  <div className="list-item-main">
-                    <strong>{p.name}</strong>
-                    <span className={`chip chip-sm ${p.status === "active" ? "chip-done" : p.status === "failed" ? "chip-failed" : "chip-queued"}`}>
-                      {p.status}
-                    </span>
-                  </div>
-                  <div className="list-item-meta">
-                    <span>{p.protocol}://{p.server}:{p.port}</span>
-                    {p.last_tested_at && <span>Test cuối: {new Date(p.last_tested_at).toLocaleDateString("vi-VN")}</span>}
-                  </div>
-                  <div className="list-item-actions">
-                    <button className="btn btn-sm" onClick={() => testProxy(p.id)}>🧪 Test</button>
-                  </div>
-                </div>
-              ))}
-              {proxies.length === 0 && <p className="text-muted">Chưa có proxy profile nào.</p>}
-            </div>
-          </Card>
-
-          <Card title="Thêm proxy">
-            <div className="form-grid">
-              <div className="form-field">
-                <label className="form-label">Tên</label>
-                <input className="form-input" value={pName} onChange={(e) => setPName(e.target.value)} placeholder="VD: proxy-us-1" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Giao thức</label>
-                <select className="form-input" value={pProtocol} onChange={(e) => setPProtocol(e.target.value)}>
-                  <option value="http">HTTP</option>
-                  <option value="https">HTTPS</option>
-                  <option value="socks5">SOCKS5</option>
-                </select>
-              </div>
-              <div className="form-field">
-                <label className="form-label">Server</label>
-                <input className="form-input" value={pServer} onChange={(e) => setPServer(e.target.value)} placeholder="proxy.example.com" />
-              </div>
-              <div className="form-field">
-                <label className="form-label">Port</label>
-                <input className="form-input" type="number" value={pPort} onChange={(e) => setPPort(e.target.value)} />
-              </div>
-            </div>
-            <div className="form-actions">
-              <button className="btn btn-primary" onClick={createProxy}>Thêm proxy</button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ── HEALTH EVENTS TAB ── */}
-      {tab === "health" && selectedWs && (
-        <Card title={`Nhật ký sức khỏe — Workspace #${selectedWs}`}>
+      {/* ── ROUTES TAB ── */}
+      {tab === "routes" && (
+        <Card title="Route Profiles (Proxy)">
           <table className="data-table">
-            <thead>
-              <tr>
-                <th>THỜI GIAN</th>
-                <th>SỰ KIỆN</th>
-                <th>MỨC ĐỘ</th>
-                <th>CHI TIẾT</th>
-              </tr>
-            </thead>
+            <thead><tr><th>ID</th><th>Tên</th><th>Server</th><th>Port</th><th>Protocol</th><th>Status</th><th>Tested</th><th>Hành động</th></tr></thead>
             <tbody>
-              {healthEvents.map((e) => (
-                <tr key={e.id}>
-                  <td>{new Date(e.created_at).toLocaleString("vi-VN")}</td>
-                  <td>{e.event_type}</td>
-                  <td><span className={`chip chip-sm ${SEV_COLOR[e.severity] || ""}`}>{e.severity}</span></td>
-                  <td>{e.message}</td>
+              {proxies.map(p => (
+                <tr key={p.id}>
+                  <td>#{p.id}</td>
+                  <td>{p.name}</td>
+                  <td>{p.server}</td>
+                  <td>{p.port}</td>
+                  <td>{p.protocol}</td>
+                  <td><span className="chip" style={{ background: p.status === "active" ? "#22c55e" : "#ef4444", color: "#fff", padding: "2px 8px", borderRadius: 8, fontSize: "0.75rem" }}>{p.status}</span></td>
+                  <td className="text-muted">{p.last_tested_at ? new Date(p.last_tested_at).toLocaleString("vi") : "—"}</td>
+                  <td><button className="btn btn-sm" onClick={() => api.post(`/api/v2/workspaces/proxy-profiles/${p.id}/test`).then(fetchAll)}>🧪 Test</button></td>
                 </tr>
               ))}
-              {healthEvents.length === 0 && <tr><td colSpan={4} className="text-muted">Chưa có nhật ký sức khỏe nào</td></tr>}
+              {proxies.length === 0 && <tr><td colSpan={8} className="text-muted">Chưa có proxy profile.</td></tr>}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* ── POLICY EVENTS TAB ── */}
+      {tab === "policy" && (
+        <Card title="Network Policy Events">
+          <table className="data-table">
+            <thead><tr><th>Thời gian</th><th>WS</th><th>Job Type</th><th>Policy</th><th>Decision</th><th>IP</th></tr></thead>
+            <tbody>
+              {events.map(e => (
+                <tr key={e.id}>
+                  <td className="text-muted" style={{ fontSize: "0.8rem" }}>{new Date(e.created_at).toLocaleString("vi")}</td>
+                  <td>#{e.workspace_id}</td>
+                  <td><code>{e.job_type}</code></td>
+                  <td><span style={{ color: POLICY_COLORS[e.policy_mode] || "#6b7280", fontWeight: 600 }}>{e.policy_mode}</span></td>
+                  <td>{e.decision === "allow" ? "✅" : e.decision === "block" ? "🚫" : "⚠️"} {e.decision}</td>
+                  <td className="text-muted">{e.outbound_ip || "—"}</td>
+                </tr>
+              ))}
+              {events.length === 0 && <tr><td colSpan={6} className="text-muted">Chưa có policy events.</td></tr>}
+            </tbody>
+          </table>
+        </Card>
+      )}
+
+      {/* ── SESSION CHECKS TAB ── */}
+      {tab === "sessions" && (
+        <Card title={`Session Checks${selWs ? ` — Workspace #${selWs}` : ""}`}>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {workspaces.map(ws => (
+              <button key={ws.id} className={`btn btn-sm${selWs === ws.id ? " btn-primary" : ""}`} onClick={() => loadSessionChecks(ws.id)}>
+                {ws.name}
+              </button>
+            ))}
+          </div>
+          <table className="data-table">
+            <thead><tr><th>Thời gian</th><th>Loại</th><th>Trạng thái</th><th>Screenshot</th></tr></thead>
+            <tbody>
+              {sessionChecks.map(sc => (
+                <tr key={sc.id}>
+                  <td className="text-muted" style={{ fontSize: "0.8rem" }}>{new Date(sc.created_at).toLocaleString("vi")}</td>
+                  <td>{sc.check_type}</td>
+                  <td>
+                    <span className="chip" style={{ background: STATUS_COLORS[sc.status] || "#6b7280", color: "#fff", padding: "2px 8px", borderRadius: 8, fontSize: "0.75rem" }}>
+                      {sc.status}
+                    </span>
+                  </td>
+                  <td className="text-muted">{sc.screenshot_path ? "📸 Có" : "—"}</td>
+                </tr>
+              ))}
+              {sessionChecks.length === 0 && <tr><td colSpan={4} className="text-muted">{selWs ? "Chưa có session checks." : "Chọn workspace để xem."}</td></tr>}
             </tbody>
           </table>
         </Card>

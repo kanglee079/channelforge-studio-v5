@@ -10,11 +10,13 @@ const NAV: { id: PageId; label: string; icon: string }[] = [
   { id: "content",    label: "Nội dung",            icon: "✍️" },
   { id: "factory",    label: "Sản xuất video",      icon: "🎬" },
   { id: "scene-planner", label: "Scene Planner",    icon: "🎯" },
+  { id: "media-intel",    label: "Media Intel",      icon: "🧠" },
   { id: "review",         label: "Duyệt nội dung",  icon: "✅" },
   { id: "templates",  label: "Mẫu video",          icon: "🎨" },
   { id: "calendar",   label: "Lịch đăng",          icon: "📅" },
   { id: "analytics",  label: "Thống kê",           icon: "📈" },
   { id: "costs",      label: "Chi phí",            icon: "💰" },
+  { id: "diagnostics", label: "Chẩn đoán",         icon: "🏥" },
   { id: "settings",   label: "Cài đặt",            icon: "⚙️" },
   { id: "logs",       label: "Nhật ký",            icon: "📋" },
 ];

@@ -255,3 +255,45 @@ def _get_db_stats() -> dict:
         return stats
     except Exception:
         return {}
+
+
+# ═══════════════════════════════════════════════════════════
+# V5.8 — Enhanced Diagnostics & Support Bundle
+# ═══════════════════════════════════════════════════════════
+
+from ..services.diagnostics import (
+    get_full_diagnostics, get_dependency_matrix,
+    generate_support_bundle, get_migration_status,
+    run_pending_migrations, log_crash,
+)
+
+
+@router.get("/diagnostics/full")
+def diagnostics_full():
+    """V5.8 comprehensive diagnostics — OS, Python, deps, FFmpeg, DB, media cache."""
+    return get_full_diagnostics()
+
+
+@router.get("/diagnostics/dependencies")
+def diagnostics_dependencies():
+    """Optional dependency matrix."""
+    return {"dependencies": get_dependency_matrix()}
+
+
+@router.post("/diagnostics/support-bundle")
+def create_support_bundle():
+    """Generate sanitized support bundle ZIP (no credentials)."""
+    path = generate_support_bundle()
+    return {"ok": True, "path": path, "message": f"Support bundle generated: {path}"}
+
+
+@router.get("/migrations/status")
+def migrations_status():
+    """Get migration version status."""
+    return get_migration_status()
+
+
+@router.post("/migrations/run")
+def run_migrations():
+    """Run pending DB migrations."""
+    return run_pending_migrations()

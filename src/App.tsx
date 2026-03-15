@@ -17,11 +17,13 @@ import SettingsPage from "./pages/SettingsPage";
 import LogsPage from "./pages/LogsPage";
 import ScenePlannerPage from "./pages/ScenePlannerPage";
 import ReviewCenterPage from "./pages/ReviewCenterPage";
+import MediaIntelligencePage from "./pages/MediaIntelligencePage";
+import DiagnosticsPage from "./pages/DiagnosticsPage";
 
 export type PageId =
   | "dashboard" | "channels" | "workspaces" | "trends"
   | "research" | "content" | "factory" | "templates"
-  | "calendar" | "analytics" | "costs" | "settings" | "logs" | "jobs" | "scene-planner" | "review";
+  | "calendar" | "analytics" | "costs" | "settings" | "logs" | "jobs" | "scene-planner" | "review" | "media-intel" | "diagnostics";
 
 export default function App() {
   const [page, setPage] = useState<PageId>("dashboard");
@@ -57,6 +59,8 @@ export default function App() {
       case "logs": return <LogsPage />;
       case "scene-planner": return <ScenePlannerPage />;
       case "review": return <ReviewCenterPage />;
+      case "media-intel": return <MediaIntelligencePage />;
+      case "diagnostics": return <DiagnosticsPage />;
       default: return <DashboardPage />;
     }
   };

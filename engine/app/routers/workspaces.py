@@ -396,3 +396,143 @@ def _test_proxy(proxy_url: str) -> bool:
         return True
     except Exception:
         return False
+
+
+# ═══════════════════════════════════════════════════════════
+# V5.6 — Workspace Supervisor (Runtime Control)
+# ═══════════════════════════════════════════════════════════
+
+from ..services.workspace_supervisor import supervisor
+from ..services.network_policy_manager import policy_manager
+from ..services.workspace_verifier import verifier
+
+
+@router.post("/{ws_id}/open")
+async def open_workspace(ws_id: int):
+    """Open workspace browser with isolated persistent context."""
+    return await supervisor.open_workspace(ws_id)
+
+
+@router.post("/{ws_id}/close")
+async def close_workspace(ws_id: int):
+    """Gracefully close workspace browser."""
+    return await supervisor.close_workspace(ws_id)
+
+
+@router.post("/{ws_id}/force-kill")
+async def force_kill_workspace(ws_id: int):
+    """Force kill workspace browser process."""
+    return await supervisor.force_kill_workspace(ws_id)
+
+
+@router.post("/{ws_id}/relaunch")
+async def relaunch_workspace(ws_id: int):
+    """Relaunch workspace browser (close then reopen)."""
+    return await supervisor.relaunch_workspace(ws_id)
+
+
+@router.get("/{ws_id}/runtime")
+def get_workspace_runtime(ws_id: int):
+    """Get runtime state for a workspace."""
+    return supervisor.get_runtime_state(ws_id)
+
+
+@router.get("/runtime/all")
+def get_all_runtime_states():
+    """Get runtime states for all workspaces."""
+    return {"items": supervisor.list_runtime_states()}
+
+
+# ═══════════════════════════════════════════════════════════
+# V5.6 — Session Verification
+# ═══════════════════════════════════════════════════════════
+
+@router.post("/{ws_id}/verify-session")
+async def verify_session(ws_id: int):
+    """Verify YouTube Studio session for workspace."""
+    handle = supervisor._registry.get(ws_id)
+    if not handle or not handle.context:
+        return {"ok": False, "message": "Workspace chưa có browser đang chạy. Hãy mở workspace trước."}
+    return await verifier.verify_youtube_studio(handle.context, ws_id)
+
+
+@router.get("/{ws_id}/session-checks")
+def get_session_checks(ws_id: int, limit: int = Query(default=20, ge=1, le=100)):
+    """Get session check history for workspace."""
+    return {"items": verifier.get_session_checks(ws_id, limit)}
+
+
+# ═══════════════════════════════════════════════════════════
+# V5.6 — Route / Network Policy
+# ═══════════════════════════════════════════════════════════
+
+class RouteBindRequest(BaseModel):
+    route_profile_id: int
+    bind_mode: str = "studio_only"
+    notes: str = ""
+
+
+@router.get("/{ws_id}/route-binding")
+def get_route_binding(ws_id: int):
+    """Get active route binding for workspace."""
+    binding = policy_manager.get_route_binding(ws_id)
+    return binding or {"message": "Không có route binding hoạt động"}
+
+
+@router.post("/{ws_id}/bind-route")
+def bind_route(ws_id: int, req: RouteBindRequest):
+    """Bind a route profile to workspace."""
+    return policy_manager.bind_route(ws_id, req.route_profile_id, req.bind_mode, req.notes)
+
+
+@router.post("/{ws_id}/unbind-route")
+def unbind_route(ws_id: int):
+    """Remove route binding from workspace."""
+    return policy_manager.unbind_route(ws_id)
+
+
+@router.post("/{ws_id}/verify-route")
+def verify_route(ws_id: int):
+    """Verify workspace route is healthy and reachable."""
+    return policy_manager.verify_route(ws_id)
+
+
+@router.get("/{ws_id}/network-events")
+def get_network_events(ws_id: int, limit: int = Query(default=50, ge=1, le=200)):
+    """Get network policy events for workspace."""
+    return {"items": policy_manager.get_network_events(ws_id, limit)}
+
+
+@router.get("/network-events/all")
+def get_all_network_events(limit: int = Query(default=100, ge=1, le=500)):
+    """Get all network policy events."""
+    return {"items": policy_manager.get_network_events(0, limit)}
+
+
+class PolicyResolveRequest(BaseModel):
+    job_type: str
+    workspace_id: int = 0
+    job_id: int = 0
+
+
+@router.post("/policy/resolve")
+def resolve_policy(req: PolicyResolveRequest):
+    """Resolve network policy for a given job type."""
+    return policy_manager.resolve_policy(req.job_type, req.workspace_id, req.job_id)
+
+
+# ═══════════════════════════════════════════════════════════
+# V5.6 — Artifacts
+# ═══════════════════════════════════════════════════════════
+
+@router.get("/{ws_id}/artifacts")
+def get_artifacts(ws_id: int):
+    """List workspace artifacts (screenshots, logs)."""
+    return supervisor.get_artifacts(ws_id)
+
+
+@router.post("/{ws_id}/capture-screenshot")
+async def capture_screenshot(ws_id: int):
+    """Capture a screenshot of the workspace browser."""
+    return await supervisor.capture_screenshot(ws_id)
+
