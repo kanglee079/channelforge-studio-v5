@@ -308,3 +308,65 @@ def system_readiness():
     """
     return get_readiness()
 
+
+@router.get("/support-bundle")
+def support_bundle():
+    """Generate sanitized support bundle for troubleshooting.
+
+    Collects: version, OS, Python, diagnostics, migrations, feature matrix.
+    Excludes: API keys, passwords, session tokens.
+    """
+    import json as _json
+
+    bundle = {
+        "app": "channelforge-studio",
+        "version": "5.8.0",
+        "os": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "machine": platform.machine(),
+            "python": sys.version,
+        },
+        "diagnostics": {},
+        "migrations": {},
+        "features": {},
+    }
+
+    # Diagnostics (reuse existing)
+    try:
+        from ..services.diagnostics import run_all_checks
+        checks = run_all_checks()
+        # Sanitize: remove any potential secrets
+        for check in checks:
+            if "fix" in check and "key" in check.get("fix", "").lower():
+                check["fix"] = "[redacted — contains key reference]"
+        bundle["diagnostics"] = {"checks": checks}
+    except Exception as e:
+        bundle["diagnostics"] = {"error": str(e)[:200]}
+
+    # Migration status
+    try:
+        bundle["migrations"] = get_migration_status()
+    except Exception as e:
+        bundle["migrations"] = {"error": str(e)[:200]}
+
+    # Feature matrix
+    bundle["features"] = {
+        "ffmpeg": bool(shutil.which("ffmpeg")),
+        "playwright": _try_import("playwright"),
+        "openai": _try_import("openai"),
+        "faiss": _try_import("faiss"),
+        "sentence_transformers": _try_import("sentence_transformers"),
+    }
+
+    return bundle
+
+
+def _try_import(module: str) -> bool:
+    """Check if a Python module is importable."""
+    try:
+        __import__(module)
+        return True
+    except ImportError:
+        return False
+
