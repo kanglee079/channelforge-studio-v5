@@ -1,0 +1,23 @@
+# Core dependencies — required for backend to boot
+fastapi>=0.116.1
+uvicorn[standard]>=0.35.0
+pydantic>=2.11.7
+httpx>=0.28.1
+python-dotenv>=1.0.1
+python-dateutil>=2.9.0
+python-multipart>=0.0.20
+apscheduler>=3.11.0
+
+# HTTP / scraping
+requests>=2.32.0
+feedparser>=6.0.11
+beautifulsoup4>=4.13.4
+trafilatura>=1.12.0
+
+# Google / YouTube API
+google-api-python-client>=2.170.0
+google-auth-oauthlib>=1.2.0
+youtube-transcript-api>=1.2.2
+
+# Image processing (used by visual match, thumbnails)
+Pillow>=10.4.0

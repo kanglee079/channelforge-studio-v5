@@ -141,7 +141,12 @@ npm install
 cd engine
 python -m venv .venv
 .venv\Scripts\activate        # Windows
-pip install -r requirements.txt
+pip install -r requirements/base.txt      # Core only
+pip install -r requirements/browser.txt   # + Playwright
+pip install -r requirements/media.txt     # + Video/audio
+pip install -r requirements/ai.txt        # + AI/ML (optional)
+# Hoặc cài tất cả:
+pip install -r requirements/all.txt
 ```
 
 ### 2. Cấu hình API keys
@@ -163,6 +168,15 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 Backend sẽ tự tạo database + chạy migrations khi khởi động.
+
+### 3.5. Kiểm tra môi trường (Doctor)
+
+```bash
+python scripts/doctor.py
+```
+
+Doctor kiểm tra: Python, Node.js, FFmpeg, packages, DB, .env, Playwright, version sync.
+Báo rõ PASS / WARN / FAIL + cách fix cho từng mục.
 
 ### 4. Chạy Frontend (Dev)
 

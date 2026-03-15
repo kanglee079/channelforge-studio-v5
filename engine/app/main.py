@@ -18,7 +18,7 @@ from .routers.system import router as system_router
 from .routers.media_intel import router as media_intel_router
 from .scheduler_ui import start_background_scheduler
 
-app = FastAPI(title="ChannelForge Studio", version="5.0.0")
+app = FastAPI(title="ChannelForge Studio", version="5.8.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,7 +57,8 @@ def healthz():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}
+    from .services.diagnostics import get_health_quick
+    return get_health_quick()
 
 
 @app.get("/api/v2/audit-logs")

@@ -265,6 +265,7 @@ from ..services.diagnostics import (
     get_full_diagnostics, get_dependency_matrix,
     generate_support_bundle, get_migration_status,
     run_pending_migrations, log_crash,
+    get_readiness,
 )
 
 
@@ -297,3 +298,13 @@ def migrations_status():
 def run_migrations():
     """Run pending DB migrations."""
     return run_pending_migrations()
+
+
+@router.get("/readiness")
+def system_readiness():
+    """Structured readiness report for first-run wizard.
+
+    Returns all checks with severity, fix suggestion, and blocker info.
+    """
+    return get_readiness()
+

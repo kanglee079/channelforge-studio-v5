@@ -25,7 +25,7 @@ def check_versions():
 
 def check_typescript():
     """Run TypeScript type check."""
-    result = subprocess.run(["npx", "tsc", "--noEmit"], cwd=str(ROOT), capture_output=True, text=True)
+    result = subprocess.run("npx tsc --noEmit", cwd=str(ROOT), capture_output=True, text=True, shell=True)
     if result.returncode == 0:
         print("✅ TypeScript: 0 errors")
         return True

@@ -1,0 +1,13 @@
+# Media processing — video rendering, frame extraction
+opencv-python-headless>=4.8.0
+moviepy>=1.0.3
+
+# Optional research / crawling
+scrapling>=0.4.2
+
+# Optional local subtitle / transcription
+faster-whisper>=1.1.0
+
+# Optional local TTS
+kokoro>=0.9.4
+soundfile>=0.13.1

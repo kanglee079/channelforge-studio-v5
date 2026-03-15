@@ -1,0 +1,6 @@
+# Install everything
+-r base.txt
+-r browser.txt
+-r media.txt
+-r ai.txt
+-r dev.txt
