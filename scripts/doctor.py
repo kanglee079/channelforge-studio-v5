@@ -80,25 +80,51 @@ def check_pip_packages() -> bool:
         fail("Không tìm thấy requirements file")
         return False
 
-    # Check critical packages only (use actual import names)
+    # Critical packages (app won't boot without these)
     critical = {
         "fastapi": "fastapi",
         "uvicorn": "uvicorn",
         "pydantic": "pydantic",
         "httpx": "httpx",
         "python-dotenv": "dotenv",
+        "aiohttp": "aiohttp",
     }
-    missing = []
+    # Optional but expected packages (features degrade without these)
+    optional = {
+        "openai": "openai",
+        "moviepy": "moviepy",
+        "elevenlabs": "elevenlabs",
+        "sentence-transformers": "sentence_transformers",
+        "faiss-cpu": "faiss",
+        "Pillow": "PIL",
+        "opencv-python-headless": "cv2",
+    }
+
+    missing_critical = []
     for pkg, mod_name in critical.items():
         try:
             importlib.import_module(mod_name)
         except ImportError:
-            missing.append(pkg)
+            missing_critical.append(pkg)
 
-    if missing:
-        fail(f"Thiếu packages: {', '.join(missing)}", f"pip install -r {base_req}")
+    if missing_critical:
+        fail(f"Thiếu core packages: {', '.join(missing_critical)}", f"pip install -r {base_req}")
         return False
     ok("Core pip packages đã cài")
+
+    missing_opt = []
+    for pkg, mod_name in optional.items():
+        try:
+            importlib.import_module(mod_name)
+        except ImportError:
+            missing_opt.append(pkg)
+
+    if missing_opt:
+        warn(f"Optional packages chưa cài: {', '.join(missing_opt)}",
+             "pip install -r engine/requirements/all.txt")
+    else:
+        ok("All optional packages đã cài")
+
     return True
 
 

@@ -21,3 +21,6 @@ youtube-transcript-api>=1.2.2
 
 # Image processing (used by visual match, thumbnails)
 Pillow>=10.4.0
+
+# Async HTTP (used by workspace supervisor, provider calls)
+aiohttp>=3.9.0

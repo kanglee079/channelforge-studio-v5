@@ -36,13 +36,104 @@ class SceneSpec:
 
 
 class SceneSpecBuilder:
-    """Build SceneSpecs from raw script text."""
+    """Build SceneSpecs from raw script text.
+
+    Strategy: try LLM enrichment first (OpenAI) → fallback to heuristic splitting.
+    """
+
+    def __init__(self):
+        self._llm_available: bool | None = None
 
     def build(self, script_text: str, channel_niche: str = "", style: str = "") -> list[SceneSpec]:
-        """Parse script into SceneSpecs. Uses heuristic sentence splitting."""
+        """Parse script into SceneSpecs. Tries LLM first, falls back to heuristic."""
         if not script_text.strip():
             return []
 
+        # Try LLM-enriched build first
+        if self._check_llm_available():
+            try:
+                specs = self._build_with_llm(script_text, channel_niche)
+                if specs:
+                    logger.info("Built %d SceneSpecs via LLM (%d chars)", len(specs), len(script_text))
+                    return specs
+            except Exception as e:
+                logger.warning("LLM scene build failed, falling back to heuristic: %s", e)
+
+        # Fallback: heuristic sentence splitting
+        return self._build_heuristic(script_text, channel_niche)
+
+    def _check_llm_available(self) -> bool:
+        """Check if OpenAI is available for LLM enrichment."""
+        if self._llm_available is None:
+            try:
+                import openai  # noqa: F401
+                import os
+                key = os.environ.get("OPENAI_API_KEY", "")
+                self._llm_available = bool(key and len(key) > 10)
+            except ImportError:
+                self._llm_available = False
+        return self._llm_available
+
+    def _build_with_llm(self, script_text: str, channel_niche: str = "") -> list[SceneSpec]:
+        """Use OpenAI to generate structured scene specs from script text."""
+        import json
+        import openai
+        import os
+
+        client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY", ""))
+
+        prompt = f"""Analyze this script and split it into visual scenes for a video.
+For each scene, return a JSON array where each element has:
+- "spoken_text": the exact text spoken during this scene
+- "visual_goal": a concise description of what the viewer should see
+- "must_have_objects": list of key visual objects (max 5)
+- "mood": one of dramatic/serene/adventurous/mysterious/neutral
+- "camera_style": one of wide_establishing/close_up/medium_shot/slow_pan/slow_zoom_out
+- "search_queries": 2-3 search queries to find matching stock media
+- "duration_sec": estimated duration in seconds (3-12 range)
+
+{"Channel niche: " + channel_niche if channel_niche else ""}
+
+Script:
+{script_text[:3000]}
+
+Return ONLY valid JSON array, no other text."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=2000,
+        )
+
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown code fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        scenes_data = json.loads(raw)
+        specs = []
+        for i, scene in enumerate(scenes_data):
+            spec = SceneSpec(
+                scene_index=i,
+                spoken_text=scene.get("spoken_text", ""),
+                visual_goal=scene.get("visual_goal", ""),
+                must_have_objects=scene.get("must_have_objects", [])[:5],
+                mood=scene.get("mood", "neutral"),
+                camera_style=scene.get("camera_style", "medium_shot"),
+                duration_sec=max(3.0, min(float(scene.get("duration_sec", 5)), 12.0)),
+                search_queries=scene.get("search_queries", [])[:3],
+                fallback_strategy="image_motion",
+            )
+            specs.append(spec)
+
+        return specs
+
+    def _build_heuristic(self, script_text: str, channel_niche: str = "") -> list[SceneSpec]:
+        """Fallback: parse script using heuristic sentence splitting."""
         sentences = self._split_sentences(script_text)
         specs = []
 
@@ -51,11 +142,10 @@ class SceneSpecBuilder:
             if not sent or len(sent) < 5:
                 continue
 
-            # Extract visual cues
             objects = self._extract_objects(sent)
             queries = self._build_search_queries(sent, channel_niche, objects)
             mood = self._detect_mood(sent)
-            duration = max(3.0, min(len(sent.split()) * 0.5, 12.0))  # ~0.5s per word, 3-12s range
+            duration = max(3.0, min(len(sent.split()) * 0.5, 12.0))
 
             spec = SceneSpec(
                 scene_index=i,
@@ -70,7 +160,7 @@ class SceneSpecBuilder:
             )
             specs.append(spec)
 
-        logger.info("Built %d SceneSpecs from script (%d chars)", len(specs), len(script_text))
+        logger.info("Built %d SceneSpecs via heuristic (%d chars)", len(specs), len(script_text))
         return specs
 
     def _split_sentences(self, text: str) -> list[str]:

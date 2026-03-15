@@ -11,3 +11,6 @@ faster-whisper>=1.1.0
 # Optional local TTS
 kokoro>=0.9.4
 soundfile>=0.13.1
+
+# Optional cloud TTS
+elevenlabs>=1.0.0

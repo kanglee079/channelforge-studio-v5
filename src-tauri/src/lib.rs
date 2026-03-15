@@ -20,6 +20,26 @@ struct SidecarHealth {
 struct RestartCounter(Mutex<(u32, std::time::Instant)>);
 
 fn spawn_python_backend() -> Option<Child> {
+    // === Release mode: try bundled sidecar binary first ===
+    let sidecar_path = find_sidecar_binary();
+    if let Some(sidecar) = sidecar_path {
+        log::info!("Starting bundled sidecar from {:?}", sidecar);
+        match Command::new(&sidecar)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => {
+                log::info!("Sidecar binary started (pid {}) — RELEASE MODE", child.id());
+                return Some(child);
+            }
+            Err(e) => {
+                log::warn!("Sidecar binary found but failed to start: {} — falling back to Python", e);
+            }
+        }
+    }
+
+    // === Dev mode: use Python venv or system Python ===
     let engine_dir = std::env::current_dir()
         .ok()
         .map(|p| p.join("engine"))
@@ -43,7 +63,7 @@ fn spawn_python_backend() -> Option<Child> {
     };
 
     log::info!(
-        "Starting Python sidecar from {:?} with {:?}",
+        "Starting Python sidecar from {:?} with {:?} — DEV MODE",
         engine_dir,
         python
     );
@@ -73,6 +93,39 @@ fn spawn_python_backend() -> Option<Child> {
             None
         }
     }
+}
+
+/// Find the sidecar binary — checks multiple locations:
+/// 1. Next to the executable (release bundle)
+/// 2. In src-tauri/binaries (dev build)
+fn find_sidecar_binary() -> Option<std::path::PathBuf> {
+    let sidecar_name = if cfg!(target_os = "windows") {
+        "channelforge-engine-x86_64-pc-windows-msvc.exe"
+    } else if cfg!(target_os = "macos") {
+        "channelforge-engine-aarch64-apple-darwin"
+    } else {
+        "channelforge-engine-x86_64-unknown-linux-gnu"
+    };
+
+    // 1. Next to the current executable (Tauri bundle)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let sidecar = exe_dir.join(sidecar_name);
+            if sidecar.exists() {
+                return Some(sidecar);
+            }
+        }
+    }
+
+    // 2. In src-tauri/binaries (dev)
+    if let Ok(cwd) = std::env::current_dir() {
+        let sidecar = cwd.join("src-tauri").join("binaries").join(sidecar_name);
+        if sidecar.exists() {
+            return Some(sidecar);
+        }
+    }
+
+    None
 }
 
 /// Check if backend is responsive
@@ -172,7 +225,7 @@ fn get_diagnostics() -> serde_json::Value {
         "os": std::env::consts::OS,
         "arch": std::env::consts::ARCH,
         "tauri_version": "2.x",
-        "app_version": "5.0.0",
+        "app_version": "5.8.0",
     })
 }
 

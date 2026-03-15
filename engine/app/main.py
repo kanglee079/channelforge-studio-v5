@@ -21,9 +21,16 @@ from .scheduler_ui import start_background_scheduler
 
 app = FastAPI(title="ChannelForge Studio", version="5.8.0")
 
+import os as _os
+_dev_mode = _os.environ.get("CHANNELFORGE_DEV", "").lower() in ("1", "true", "yes")
+_allowed_origins = ["*"] if _dev_mode else [
+    "http://localhost:1420", "http://127.0.0.1:1420",
+    "https://tauri.localhost", "tauri://localhost",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

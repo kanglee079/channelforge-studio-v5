@@ -89,14 +89,25 @@ class NetworkPolicyManager:
                     "reason": f"Routed via workspace #{workspace_id} route profile #{route_info['route_profile_id']}",
                 }
             else:
-                # No route binding, but workspace exists — allow with direct (user's own connection)
-                result = {
-                    "policy_mode": "WORKSPACE_ROUTE",
-                    "decision": "allow_direct",
-                    "route_profile_id": 0,
-                    "outbound_ip": "",
-                    "reason": f"Workspace #{workspace_id} has no route binding — using direct connection",
-                }
+                # Fail-closed: no route binding → BLOCK
+                # Workspace must explicitly bind a route or set allow_unrouted=1
+                allow_unrouted = self._check_allow_unrouted(workspace_id)
+                if allow_unrouted:
+                    result = {
+                        "policy_mode": "WORKSPACE_ROUTE",
+                        "decision": "allow_direct_override",
+                        "route_profile_id": 0,
+                        "outbound_ip": "",
+                        "reason": f"Workspace #{workspace_id} has no route but allow_unrouted is enabled — using direct",
+                    }
+                else:
+                    result = {
+                        "policy_mode": "BLOCK",
+                        "decision": "block",
+                        "route_profile_id": 0,
+                        "outbound_ip": "",
+                        "reason": f"Workspace #{workspace_id} has no route binding — bind a route or enable allow_unrouted",
+                    }
 
             self._record_event(workspace_id, job_id, job_type, result)
             return result
@@ -216,6 +227,25 @@ class NetworkPolicyManager:
             (workspace_id,),
         ).fetchone()
         return dict(row) if row else None
+
+    def _check_allow_unrouted(self, workspace_id: int) -> bool:
+        """Check if workspace explicitly allows unrouted (direct) connections.
+
+        Workspace must opt-in via channel_automation_policy.notes containing 'allow_unrouted'
+        or via a future explicit column. This is a safety measure — by default, workspace
+        traffic to YouTube MUST go through a bound route.
+        """
+        conn = get_conn()
+        try:
+            row = conn.execute(
+                "SELECT notes FROM channel_automation_policy WHERE workspace_id=?",
+                (workspace_id,),
+            ).fetchone()
+            if row and row["notes"] and "allow_unrouted" in row["notes"].lower():
+                return True
+        except Exception:
+            pass
+        return False
 
     def _record_event(self, workspace_id: int, job_id: int, job_type: str, decision: dict):
         """Record a network policy decision event."""
