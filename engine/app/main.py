@@ -31,6 +31,11 @@ app.add_middleware(
 init_db()
 sync_profiles()
 seed_default_templates()
+
+# Reconcile stale workspace runtimes after restart
+from .services.workspace_supervisor import supervisor as ws_supervisor
+ws_supervisor.reconcile_stale_runtimes()
+
 start_background_scheduler()
 
 # V1 API (backward compatible)

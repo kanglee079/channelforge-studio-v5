@@ -15,7 +15,7 @@ interface RuntimeState {
   last_launch_at: string; last_seen_alive_at: string; last_error_message: string;
   in_registry?: boolean;
 }
-interface ProxyProfile { id: number; name: string; server: string; port: number; protocol: string; status: string; last_tested_at: string; }
+interface ProxyProfile { id: number; name: string; server: string; port: number; protocol: string; status: string; last_tested_at: string; last_test_ok?: number; last_test_latency_ms?: number; last_test_ip?: string; }
 interface PolicyEvent { id: number; workspace_id: number; job_type: string; policy_mode: string; decision: string; outbound_ip: string; created_at: string; }
 interface SessionCheck { id: number; workspace_id: number; check_type: string; status: string; details_json: string; screenshot_path: string; created_at: string; }
 
@@ -115,12 +115,19 @@ export default function WorkspacesPage() {
                 {rt?.last_error_message && (
                   <div style={{ background: "rgba(239,68,68,0.15)", padding: 8, borderRadius: 6, fontSize: "0.8rem", marginBottom: 8, color: "#f87171" }}>
                     ⚠️ {rt.last_error_message.slice(0, 120)}
+                    {(status === "failed" || status === "degraded" || status === "login_required") && (
+                      <div style={{ marginTop: 4, fontSize: "0.75rem", color: "#f59e0b" }}>
+                        💡 {status === "login_required" ? "Mở browser và đăng nhập YouTube Studio, sau đó Verify lại" :
+                           status === "failed" ? "Thử Relaunch hoặc kiểm tra Playwright đã cài chưa" :
+                           "Kiểm tra kết nối mạng và proxy route"}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Action buttons */}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {(!rt || status === "stopped" || status === "crashed") && (
+                  {(!rt || status === "stopped" || status === "failed" || status === "initialized" || status === "new") && (
                     <button className="btn btn-sm btn-primary" disabled={!!loading} onClick={() => doAction(ws.id, "open")}>▶ Mở</button>
                   )}
                   {(status === "running" || status === "upload_ready") && (
@@ -149,7 +156,7 @@ export default function WorkspacesPage() {
       {tab === "routes" && (
         <Card title="Route Profiles (Proxy)">
           <table className="data-table">
-            <thead><tr><th>ID</th><th>Tên</th><th>Server</th><th>Port</th><th>Protocol</th><th>Status</th><th>Tested</th><th>Hành động</th></tr></thead>
+            <thead><tr><th>ID</th><th>Tên</th><th>Server</th><th>Port</th><th>Protocol</th><th>Status</th><th>Latency</th><th>IP</th><th>Tested</th><th>Hành động</th></tr></thead>
             <tbody>
               {proxies.map(p => (
                 <tr key={p.id}>
@@ -159,11 +166,13 @@ export default function WorkspacesPage() {
                   <td>{p.port}</td>
                   <td>{p.protocol}</td>
                   <td><span className="chip" style={{ background: p.status === "active" ? "#22c55e" : "#ef4444", color: "#fff", padding: "2px 8px", borderRadius: 8, fontSize: "0.75rem" }}>{p.status}</span></td>
+                  <td className="text-muted">{p.last_test_latency_ms ? `${p.last_test_latency_ms}ms` : "—"}</td>
+                  <td className="text-muted" style={{ fontSize: "0.8rem" }}>{p.last_test_ip || "—"}</td>
                   <td className="text-muted">{p.last_tested_at ? new Date(p.last_tested_at).toLocaleString("vi") : "—"}</td>
                   <td><button className="btn btn-sm" onClick={() => api.post(`/api/v2/workspaces/proxy-profiles/${p.id}/test`).then(fetchAll)}>🧪 Test</button></td>
                 </tr>
               ))}
-              {proxies.length === 0 && <tr><td colSpan={8} className="text-muted">Chưa có proxy profile.</td></tr>}
+              {proxies.length === 0 && <tr><td colSpan={10} className="text-muted">Chưa có proxy profile.</td></tr>}
             </tbody>
           </table>
         </Card>

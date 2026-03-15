@@ -317,13 +317,17 @@ def test_proxy_profile(profile_id: int):
         raise HTTPException(404, "Proxy profile not found")
 
     proxy_url = f"{row['protocol']}://{row['server']}:{row['port']}"
-    ok = _test_proxy(proxy_url)
+    test_result = _test_proxy_detailed(proxy_url)
     now = utc_now_iso()
+    ok = test_result["ok"]
     status = "active" if ok else "failed"
-    conn.execute("UPDATE proxy_profiles SET last_tested_at=?, last_test_status=?, status=?, updated_at=? WHERE id=?",
-                 (now, "ok" if ok else "unreachable", status, now, profile_id))
+    conn.execute(
+        "UPDATE proxy_profiles SET last_tested_at=?, last_test_status=?, status=?, last_test_ok=?, last_test_latency_ms=?, last_test_ip=?, updated_at=? WHERE id=?",
+        (now, "ok" if ok else "unreachable", status, int(ok), test_result["latency_ms"], test_result["ip"], now, profile_id),
+    )
     conn.commit()
-    return {"ok": ok, "message": f"Proxy {'reachable' if ok else 'unreachable'}", "status": status}
+    return {"ok": ok, "message": f"Proxy {'reachable' if ok else 'unreachable'}", "status": status,
+            "latency_ms": test_result["latency_ms"], "outbound_ip": test_result["ip"]}
 
 
 @router.post("/{ws_id}/bind-proxy")
@@ -388,14 +392,25 @@ def _disk_info(path: Path) -> dict:
 
 
 def _test_proxy(proxy_url: str) -> bool:
+    return _test_proxy_detailed(proxy_url)["ok"]
+
+
+def _test_proxy_detailed(proxy_url: str) -> dict:
+    """Test proxy connectivity. Returns ok, latency_ms, ip."""
+    import time
     try:
         import urllib.request
+        import json
         proxy_handler = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
         opener = urllib.request.build_opener(proxy_handler)
-        opener.open("http://httpbin.org/ip", timeout=10)
-        return True
+        t0 = time.monotonic()
+        response = opener.open("http://httpbin.org/ip", timeout=10)
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        data = json.loads(response.read())
+        ip = data.get("origin", "")
+        return {"ok": True, "latency_ms": latency_ms, "ip": ip}
     except Exception:
-        return False
+        return {"ok": False, "latency_ms": 0, "ip": ""}
 
 
 # ═══════════════════════════════════════════════════════════

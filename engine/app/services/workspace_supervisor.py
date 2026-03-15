@@ -45,6 +45,33 @@ class WorkspaceSupervisor:
             self._locks[workspace_id] = asyncio.Lock()
         return self._locks[workspace_id]
 
+    # ── Reconcile stale runtimes on startup ─────────────────────
+
+    def reconcile_stale_runtimes(self):
+        """Reset stale 'running/launching' states after backend restart.
+
+        Called once on startup. Since in-memory registry is empty,
+        any DB record showing 'running' or 'launching' is stale.
+        """
+        from .workspace_states import transition
+        conn = get_conn()
+        stale_states = ('running', 'launching', 'opened', 'verifying', 'closing')
+        rows = conn.execute(
+            f"SELECT workspace_id, runtime_status FROM workspace_runtime_state WHERE runtime_status IN ({','.join('?' for _ in stale_states)})",
+            stale_states,
+        ).fetchall()
+
+        count = 0
+        for row in rows:
+            ws_id = row['workspace_id']
+            old = row['runtime_status']
+            transition(ws_id, old, 'stopped', reason='Backend restarted — reconciled stale runtime', force=True)
+            count += 1
+
+        if count > 0:
+            logger.info('Reconciled %d stale workspace runtime(s) to stopped', count)
+        return count
+
     # ── State persistence ──────────────────────────────────────
 
     def _save_runtime_state(self, ws_id: int, status: str, **kwargs):
@@ -99,8 +126,9 @@ class WorkspaceSupervisor:
             if not row:
                 return {"ok": False, "message": "Workspace không tồn tại"}
 
-            self._save_runtime_state(workspace_id, "launching")
-            self._log_health_event(workspace_id, "workspace_opening", "info", "Đang khởi động browser...")
+            from .workspace_states import transition, get_current_state
+            current = get_current_state(workspace_id)
+            transition(workspace_id, current, "launching", reason="Browser opening")
 
             try:
                 from playwright.async_api import async_playwright
@@ -164,8 +192,8 @@ class WorkspaceSupervisor:
 
             except Exception as e:
                 err_msg = str(e)[:500]
-                self._save_runtime_state(workspace_id, "crashed", last_error_code="LAUNCH_FAILED", last_error_message=err_msg)
-                self._log_health_event(workspace_id, "browser_launch_failed", "error", err_msg)
+                self._save_runtime_state(workspace_id, "failed", last_error_code="LAUNCH_FAILED", last_error_message=err_msg)
+                transition(workspace_id, "launching", "failed", reason=f"Launch failed: {err_msg}", force=True)
                 return {"ok": False, "message": f"Khởi động thất bại: {err_msg}"}
 
     # ── Close workspace ────────────────────────────────────────
