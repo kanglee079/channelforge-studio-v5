@@ -18,7 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 class Retriever:
-    """Retrieve candidate assets for scenes using semantic search + providers."""
+    """Retrieve candidate assets for scenes using semantic search + providers.
+
+    Fallback chain:
+    1. Vector index — semantic search on local indexed assets
+    2. DB keyword search — tags/keyword match on local cache
+    3. Remote providers (Pexels/Pixabay) — API calls with query generation
+    """
 
     def __init__(self, embedder: Embedder, index: IndexStore):
         self.embedder = embedder
@@ -27,7 +33,7 @@ class Retriever:
     def retrieve_for_scene(self, spec: SceneSpec, top_k: int = 10) -> list[dict]:
         """Retrieve candidate assets for a scene spec.
 
-        Strategy:
+        Strategy (fallback chain):
         1. Semantic vector search (if index is loaded)
         2. DB keyword search on local assets
         3. Provider API search (Pexels/Pixabay) via existing pipeline
@@ -50,7 +56,12 @@ class Retriever:
         db_results = self._search_db_assets(spec.search_queries, top_k)
         candidates.extend(db_results)
 
-        # 3. Deduplicate by asset_key
+        # 3. Remote provider search (if local results insufficient)
+        if len(candidates) < top_k // 2:
+            remote = self._search_remote_providers(spec, top_k)
+            candidates.extend(remote)
+
+        # 4. Deduplicate by asset_key
         seen = set()
         unique = []
         for c in candidates:
@@ -82,3 +93,21 @@ class Retriever:
                     item["similarity"] = 0.3  # Base score for keyword match
                     results.append(item)
         return results
+
+    def _search_remote_providers(self, spec: SceneSpec, limit: int) -> list[dict]:
+        """Search remote providers (Pexels/Pixabay) — degrades gracefully."""
+        results = []
+        try:
+            from ..services.media_clients import search_stock_media
+            for query in spec.search_queries[:2]:
+                remote = search_stock_media(query, media_type=spec.asset_preference, limit=limit // 2)
+                for r in remote:
+                    r["source"] = "remote_provider"
+                    r["similarity"] = 0.2  # Base score for remote result
+                results.extend(remote)
+        except ImportError:
+            logger.debug("media_clients not available — skipping remote providers")
+        except Exception as e:
+            logger.warning("Remote provider search failed: %s", e)
+        return results
+

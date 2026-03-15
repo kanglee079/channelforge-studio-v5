@@ -285,3 +285,32 @@ def retry_scene(run_id: int, req: RetrySceneRequest):
     return {"ok": True, "message": f"Scene #{req.scene_index} re-matched",
             "new_confidence": selected.confidence_label if selected else "low",
             "candidates": len(ranked)}
+
+
+@router.get("/match/reviews")
+def list_reviews(limit: int = 50):
+    """List scene match items that require review."""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT mi.*, mr.channel_name, mr.status as run_status FROM scene_match_items mi "
+        "JOIN scene_match_runs mr ON mi.run_id = mr.id "
+        "WHERE mi.requires_review = 1 ORDER BY mi.created_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return {"items": [dict(r) for r in rows], "total": len(rows)}
+
+
+@router.post("/match/runs/{run_id}/review-complete")
+def complete_review(run_id: int):
+    """Mark all review-required items in a run as reviewed."""
+    conn = get_conn()
+    now = utc_now_iso()
+    conn.execute(
+        "UPDATE scene_match_items SET requires_review = 0, explain_json = json_set(explain_json, '$.reviewed_at', ?) "
+        "WHERE run_id = ? AND requires_review = 1", (now, run_id)
+    )
+    conn.execute(
+        "UPDATE scene_match_runs SET status = 'reviewed' WHERE id = ?", (run_id,)
+    )
+    conn.commit()
+    return {"ok": True, "message": f"Run #{run_id} review complete"}
+
