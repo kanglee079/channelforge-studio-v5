@@ -271,3 +271,22 @@ code {
   border-radius: 3px;
   color: var(--text-muted);
 }
+
+/* ─── Mini stats (inline in cards) ─── */
+.mini-stat {
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  text-align: center;
+}
+.mini-stat-value { font-size: 20px; font-weight: 700; color: var(--text); line-height: 1.2; }
+.mini-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); margin-top: 2px; }
+
+/* ─── Links ─── */
+.link-external { font-size: 12px; color: var(--accent); }
+.link-external:hover { text-decoration: underline; }
+
+/* ─── Grid spacing ─── */
+.grid-2 { margin-bottom: 16px; }
+
