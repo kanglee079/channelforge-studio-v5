@@ -17,6 +17,7 @@ from .routers.review_analytics_cost import router as rac_router
 from .routers.system import router as system_router
 from .routers.media_intel import router as media_intel_router
 from .routers.pipeline import router as pipeline_router
+from .routers.youtube import router as youtube_router
 from .scheduler_ui import start_background_scheduler
 
 app = FastAPI(title="ChannelForge Studio", version="5.8.0")
@@ -62,6 +63,9 @@ app.include_router(rac_router)
 app.include_router(system_router)
 app.include_router(media_intel_router)
 app.include_router(pipeline_router)
+
+# YouTube API (real integration)
+app.include_router(youtube_router)
 
 
 @app.get("/healthz")
